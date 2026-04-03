@@ -1,0 +1,1 @@
+{"name":"slash-coin","private":true,"version":"0.0.1","type":"module","scripts":{"dev":"vite","build":"vite build","preview":"vite preview"},"dependencies":{"matter-js":"^0.20.0","typescript":"^6.0.2","vite":"^8.0.3"},"devDependencies":{"@types/matter-js":"^0.20.2"}}
