@@ -1,28 +1,35 @@
 import Matter from "matter-js";
-import { Product, PRODUCT_TIERS } from "./types";
+import type { Product, MergeContext } from "./types";
 import { PhysicsWorld } from "./physics";
+import { BASE_KIND_ID, getKind, pickMergeResult, MERGE_TABLE } from "./mergeTree";
+
+export type RandomRemoveResult = { x: number; y: number; color: string };
 
 let nextId = 1;
 
 export class ProductManager {
   products: Product[] = [];
   private physics: PhysicsWorld;
-  private mergeQueue: { ids: number[]; tier: number; cx: number; cy: number }[] = [];
-  onMerge: ((tier: number) => void) | null = null;
+  private mergeQueue: { ids: number[]; sourceKindId: string; cx: number; cy: number }[] = [];
+  onMerge: ((resultKindId: string) => void) | null = null;
+
+  getMergeContext: () => MergeContext = () => ({ favoredBranch: null, gamblerRelic: false });
+  getMergeRadiusMult: () => number = () => 1;
+  getMergeBlastMult: () => number = () => 1;
 
   constructor(physics: PhysicsWorld) {
     this.physics = physics;
   }
 
-  spawnProduct(x: number, y: number, tier: number): Product {
-    const def = PRODUCT_TIERS[tier];
+  spawnProduct(x: number, y: number, kindId: string): Product {
+    const def = getKind(kindId);
     const body = this.physics.createProductBody(x, y, def.radius);
     this.physics.addBody(body);
 
     const p: Product = {
       id: nextId++,
       body,
-      tier,
+      kindId,
       merging: false,
       mergeAnimTimer: 0,
       spawnAnimTimer: 0.3,
@@ -31,15 +38,25 @@ export class ProductManager {
     return p;
   }
 
-  spawnDrops(x: number, y: number, value: number) {
+  spawnDrops(
+    x: number,
+    y: number,
+    value: number,
+    screenW: number,
+    attractCenter = 0,
+  ) {
     let remaining = value;
+    const cx = screenW * 0.5;
     while (remaining > 0) {
       const count = Math.min(remaining, 3);
       remaining -= count;
       for (let i = 0; i < count; i++) {
-        const ox = (Math.random() - 0.5) * 30;
+        const dx = cx - x;
+        const ox =
+          (Math.random() - 0.5) * 30 +
+          dx * attractCenter * (0.35 + Math.random() * 0.35);
         const oy = (Math.random() - 0.5) * 20;
-        const p = this.spawnProduct(x + ox, y + oy, 0);
+        const p = this.spawnProduct(x + ox, y + oy, BASE_KIND_ID);
         const vx = (Math.random() - 0.5) * 3;
         const vy = -(Math.random() * 3 + 1);
         Matter.Body.setVelocity(p.body, { x: vx, y: vy });
@@ -57,23 +74,25 @@ export class ProductManager {
   }
 
   private checkMerges() {
-    const byTier = new Map<number, Product[]>();
+    const byKind = new Map<string, Product[]>();
     for (const p of this.products) {
       if (p.merging) continue;
-      const arr = byTier.get(p.tier) || [];
+      const arr = byKind.get(p.kindId) || [];
       arr.push(p);
-      byTier.set(p.tier, arr);
+      byKind.set(p.kindId, arr);
     }
 
-    for (const [tier, prods] of byTier) {
-      if (tier >= PRODUCT_TIERS.length - 1) continue;
+    for (const [kindId, prods] of byKind) {
+      const outs = MERGE_TABLE[kindId];
+      if (!outs?.length) continue;
       if (prods.length < 3) continue;
 
       const clusters = this.findClusters(prods);
       for (const cluster of clusters) {
         if (cluster.length >= 3) {
           const group = cluster.slice(0, 3);
-          let cx = 0, cy = 0;
+          let cx = 0;
+          let cy = 0;
           for (const p of group) {
             p.merging = true;
             cx += p.body.position.x;
@@ -83,7 +102,7 @@ export class ProductManager {
           cy /= 3;
           this.mergeQueue.push({
             ids: group.map((p) => p.id),
-            tier: tier + 1,
+            sourceKindId: kindId,
             cx,
             cy,
           });
@@ -96,6 +115,7 @@ export class ProductManager {
     if (prods.length < 3) return [];
     const clusters: Product[][] = [];
     const used = new Set<number>();
+    const mult = this.getMergeRadiusMult();
 
     for (let i = 0; i < prods.length; i++) {
       if (used.has(prods[i].id)) continue;
@@ -105,10 +125,11 @@ export class ProductManager {
 
       while (queue.length > 0) {
         const cur = queue.shift()!;
+        const curR = getKind(cur.kindId).radius;
         for (let j = 0; j < prods.length; j++) {
           if (used.has(prods[j].id)) continue;
           const dist = this.bodyDist(cur.body, prods[j].body);
-          const touchDist = PRODUCT_TIERS[cur.tier].radius * 2.5;
+          const touchDist = (curR + getKind(prods[j].kindId).radius) * 1.25 * mult;
           if (dist < touchDist) {
             cluster.push(prods[j]);
             queue.push(prods[j]);
@@ -128,6 +149,7 @@ export class ProductManager {
   }
 
   private processMergeQueue() {
+    const ctx = this.getMergeContext();
     for (const m of this.mergeQueue) {
       for (const id of m.ids) {
         const idx = this.products.findIndex((p) => p.id === id);
@@ -136,10 +158,11 @@ export class ProductManager {
           this.products.splice(idx, 1);
         }
       }
-      const np = this.spawnProduct(m.cx, m.cy, m.tier);
+      const resultKindId = pickMergeResult(m.sourceKindId, ctx);
+      const np = this.spawnProduct(m.cx, m.cy, resultKindId);
       np.mergeAnimTimer = 0.3;
 
-      const pushForce = 0.02;
+      const pushForce = 0.02 * this.getMergeBlastMult();
       for (const p of this.products) {
         if (p.id === np.id) continue;
         const dx = p.body.position.x - m.cx;
@@ -153,7 +176,7 @@ export class ProductManager {
         }
       }
 
-      if (this.onMerge) this.onMerge(m.tier);
+      if (this.onMerge) this.onMerge(resultKindId);
     }
     this.mergeQueue = [];
   }
@@ -162,6 +185,18 @@ export class ProductManager {
     this.physics.removeBody(product.body);
     const idx = this.products.indexOf(product);
     if (idx >= 0) this.products.splice(idx, 1);
+  }
+
+  /** 炸弹误切：真随机移除一枚场上产物（无增益） */
+  removeRandomProduct(): RandomRemoveResult | null {
+    if (this.products.length === 0) return null;
+    const idx = Math.floor(Math.random() * this.products.length);
+    const p = this.products[idx]!;
+    const x = p.body.position.x;
+    const y = p.body.position.y;
+    const color = getKind(p.kindId).color;
+    this.removeProduct(p);
+    return { x, y, color };
   }
 
   findNearestProduct(x: number, y: number, maxDist: number): Product | null {
@@ -182,7 +217,7 @@ export class ProductManager {
   totalValue(): number {
     let v = 0;
     for (const p of this.products) {
-      v += PRODUCT_TIERS[p.tier].value;
+      v += getKind(p.kindId).value;
     }
     return v;
   }
@@ -196,7 +231,8 @@ export class ProductManager {
       const dx = p.body.position.x - x;
       const dy = p.body.position.y - y;
       const dist = Math.sqrt(dx * dx + dy * dy);
-      const hitRadius = PRODUCT_TIERS[p.tier].radius + 15;
+      const r = getKind(p.kindId).radius;
+      const hitRadius = r + 15;
       if (dist < hitRadius) {
         const forceMag = Math.min(speed * 0.00005, 0.03);
         Matter.Body.applyForce(p.body, p.body.position, {

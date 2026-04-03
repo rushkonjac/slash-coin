@@ -9,8 +9,21 @@ export class InputManager {
   private _lastTime = 0;
   private _segments: { p1: SlashPoint; p2: SlashPoint }[] = [];
 
+  private _holdStartTime = 0;
+  private _holdX = 0;
+  private _holdY = 0;
+  private _holdMoved = false;
+  private _holdTriggered = false;
+  holdProgress = 0;
+  holdActive = false;
+  holdX = 0;
+  holdY = 0;
+  private _pendingHold: { x: number; y: number } | null = null;
+
   readonly MAX_TRAIL_POINTS = 30;
-  readonly TRAIL_LIFETIME = 200; // ms
+  readonly TRAIL_LIFETIME = 200;
+  readonly HOLD_DURATION = 800;
+  readonly HOLD_MOVE_THRESHOLD = 15;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -49,6 +62,12 @@ export class InputManager {
     this._segments = [];
     const pt: SlashPoint = { x: cx, y: cy, time: this._lastTime, speed: 0 };
     this._points.push(pt);
+
+    this._holdStartTime = performance.now();
+    this._holdX = cx;
+    this._holdY = cy;
+    this._holdMoved = false;
+    this._holdTriggered = false;
   }
 
   private onMove(cx: number, cy: number) {
@@ -74,10 +93,18 @@ export class InputManager {
     this._lastX = cx;
     this._lastY = cy;
     this._lastTime = now;
+
+    const holdDx = cx - this._holdX;
+    const holdDy = cy - this._holdY;
+    if (Math.sqrt(holdDx * holdDx + holdDy * holdDy) > this.HOLD_MOVE_THRESHOLD) {
+      this._holdMoved = true;
+    }
   }
 
   private onUp() {
     this._isDown = false;
+    this.holdActive = false;
+    this.holdProgress = 0;
   }
 
   get isSlashing(): boolean {
@@ -98,5 +125,30 @@ export class InputManager {
     while (this._points.length > 0 && now - this._points[0].time > this.TRAIL_LIFETIME) {
       this._points.shift();
     }
+  }
+
+  updateHold() {
+    if (!this._isDown || this._holdMoved || this._holdTriggered) {
+      this.holdActive = false;
+      this.holdProgress = 0;
+      return;
+    }
+    const elapsed = performance.now() - this._holdStartTime;
+    this.holdProgress = Math.min(elapsed / this.HOLD_DURATION, 1);
+    this.holdX = this._holdX;
+    this.holdY = this._holdY;
+    this.holdActive = true;
+    if (this.holdProgress >= 1) {
+      this._holdTriggered = true;
+      this._pendingHold = { x: this._holdX, y: this._holdY };
+      this.holdActive = false;
+      this.holdProgress = 0;
+    }
+  }
+
+  consumeHold(): { x: number; y: number } | null {
+    const h = this._pendingHold;
+    this._pendingHold = null;
+    return h;
   }
 }

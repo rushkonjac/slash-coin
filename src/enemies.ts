@@ -11,12 +11,14 @@ export class EnemyManager {
   waveClearTimer = 0;
   private screenW: number;
   private screenH: number;
-  private dividerY: number;
+  enemySlowMult = 1;
+  /** 冰冻斩击：滞空敌人重力乘数（由 Game 每帧同步） */
+  iceSlashGravityMult = 1;
+  onWaveStart: ((wave: number) => void) | null = null;
 
-  constructor(screenW: number, screenH: number, dividerY: number) {
+  constructor(screenW: number, screenH: number) {
     this.screenW = screenW;
     this.screenH = screenH;
-    this.dividerY = dividerY;
     this.startWave(1);
   }
 
@@ -26,6 +28,7 @@ export class EnemyManager {
     this.waveActive = true;
     this.spawnTimer = 0;
     this.waveClearTimer = 0;
+    if (this.onWaveStart) this.onWaveStart(wave);
   }
 
   private enemiesForWave(w: number): number {
@@ -36,8 +39,8 @@ export class EnemyManager {
     return Math.max(400, 1400 - this.wave * 70);
   }
 
-  private enemySpeed(): number {
-    return 70 + this.wave * 6;
+  private enemyGravity(): number {
+    return (120 + this.wave * 10) * this.enemySlowMult;
   }
 
   private enemyValue(): number {
@@ -67,14 +70,28 @@ export class EnemyManager {
         e.flashTimer += dt;
         continue;
       }
-      e.y += e.speed * dt;
+
+      const gMul = e.iceSlowTimer > 0 ? this.iceSlashGravityMult : 1;
+      e.vy += e.gravity * gMul * dt;
+      e.y += e.vy * dt;
+      if (e.iceSlowTimer > 0) {
+        e.iceSlowTimer -= dt;
+        if (e.iceSlowTimer < 0) e.iceSlowTimer = 0;
+      }
 
       const landY = this.screenH - 30 - e.radius;
       if (e.y >= landY) {
         e.y = landY;
-        e.leaked = true;
-        e.leakedTimer = 0;
-        e.flashTimer = 0;
+        if (e.isBomb) {
+          e.leaked = true;
+          e.bombConvertPending = true;
+          e.leakedTimer = 0;
+          e.flashTimer = 0;
+        } else {
+          e.leaked = true;
+          e.leakedTimer = 0;
+          e.flashTimer = 0;
+        }
       }
     }
 
@@ -89,16 +106,22 @@ export class EnemyManager {
     }
   }
 
+  private bombSpawnChance(): number {
+    return Math.min(0.3, 0.07 + this.wave * 0.016);
+  }
+
   private spawnEnemy() {
     const margin = 40;
     const x = margin + Math.random() * (this.screenW - margin * 2);
+    const isBomb = Math.random() < this.bombSpawnChance();
     const e: Enemy = {
       id: nextId++,
       x,
       y: -25,
-      radius: 18,
+      vy: 10 + Math.random() * 20,
+      radius: isBomb ? 20 : 18,
       hp: 1,
-      speed: this.enemySpeed(),
+      gravity: this.enemyGravity(),
       value: this.enemyValue(),
       alive: true,
       leaked: false,
@@ -108,6 +131,9 @@ export class EnemyManager {
       deathVy: 0,
       deathTimer: 0,
       dying: false,
+      isBomb,
+      bombConvertPending: false,
+      iceSlowTimer: 0,
     };
     this.enemies.push(e);
   }

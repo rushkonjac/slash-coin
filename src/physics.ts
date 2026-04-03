@@ -13,7 +13,7 @@ export class PhysicsWorld {
     public height: number,
   ) {
     this.engine = Matter.Engine.create({
-      gravity: { x: 0, y: 1.8, scale: 1 },
+      gravity: { x: 0, y: 1.8 },
     });
     this.world = this.engine.world;
 
