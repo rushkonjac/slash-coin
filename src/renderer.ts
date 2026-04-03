@@ -21,22 +21,45 @@ export class Renderer {
 
   clear() {
     const ctx = this.ctx;
+
     ctx.fillStyle = COLORS.battleZone;
     ctx.fillRect(0, 0, this.width, this.dividerY);
-    ctx.fillStyle = COLORS.mergeZone;
+
+    const mergeGrad = ctx.createLinearGradient(0, this.dividerY, 0, this.height);
+    mergeGrad.addColorStop(0, "#161638");
+    mergeGrad.addColorStop(1, "#0e0e22");
+    ctx.fillStyle = mergeGrad;
     ctx.fillRect(0, this.dividerY, this.width, this.height - this.dividerY);
 
+    const platformH = 30;
+    const platGrad = ctx.createLinearGradient(0, this.height - platformH, 0, this.height);
+    platGrad.addColorStop(0, COLORS.platformTop);
+    platGrad.addColorStop(1, COLORS.platform);
+    ctx.fillStyle = platGrad;
+    ctx.fillRect(0, this.height - platformH, this.width, platformH);
+
+    ctx.strokeStyle = COLORS.platformTop;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(0, this.height - platformH);
+    ctx.lineTo(this.width, this.height - platformH);
+    ctx.stroke();
+
     ctx.strokeStyle = COLORS.divider;
-    ctx.lineWidth = 1;
-    ctx.setLineDash([8, 8]);
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([6, 6]);
     ctx.beginPath();
     ctx.moveTo(0, this.dividerY);
     ctx.lineTo(this.width, this.dividerY);
     ctx.stroke();
     ctx.setLineDash([]);
 
-    ctx.fillStyle = COLORS.platform;
-    ctx.fillRect(0, this.height - 30, this.width, 30);
+    const glowGrad = ctx.createLinearGradient(0, this.dividerY - 15, 0, this.dividerY + 15);
+    glowGrad.addColorStop(0, "rgba(50, 60, 160, 0)");
+    glowGrad.addColorStop(0.5, "rgba(50, 60, 160, 0.15)");
+    glowGrad.addColorStop(1, "rgba(50, 60, 160, 0)");
+    ctx.fillStyle = glowGrad;
+    ctx.fillRect(0, this.dividerY - 15, this.width, 30);
   }
 
   drawSlashTrail(points: SlashPoint[], now: number) {
@@ -56,7 +79,7 @@ export class Renderer {
       ctx.save();
       ctx.globalAlpha = alpha * 0.6;
       ctx.strokeStyle = COLORS.slashGlow;
-      ctx.lineWidth = width + 6;
+      ctx.lineWidth = width + 8;
       ctx.lineCap = "round";
       ctx.beginPath();
       ctx.moveTo(p0.x, p0.y);
@@ -86,6 +109,10 @@ export class Renderer {
       }
 
       const isFlashing = e.leaked && Math.sin(e.flashTimer * 8) > 0;
+
+      ctx.shadowColor = e.leaked ? "#ff4444" : "#ff3355";
+      ctx.shadowBlur = e.leaked ? (isFlashing ? 15 : 5) : 8;
+
       ctx.fillStyle = e.leaked ? COLORS.leakedEnemy : COLORS.enemyFill;
       ctx.strokeStyle = isFlashing ? "#ff8888" : COLORS.enemyStroke;
       ctx.lineWidth = 2;
@@ -95,14 +122,18 @@ export class Renderer {
       ctx.fill();
       ctx.stroke();
 
+      ctx.shadowColor = "transparent";
+      ctx.shadowBlur = 0;
+
       if (e.leaked && !e.dying) {
         ctx.fillStyle = "#ffffff";
-        ctx.font = "10px monospace";
+        ctx.font = `${e.radius}px sans-serif`;
         ctx.textAlign = "center";
-        ctx.fillText("🍴", e.x, e.y + 4);
+        ctx.textBaseline = "middle";
+        ctx.fillText("🍴", e.x, e.y);
       } else if (!e.dying) {
         ctx.fillStyle = "#ffcccc";
-        ctx.font = `${e.radius * 0.7}px monospace`;
+        ctx.font = `${e.radius * 1.1}px sans-serif`;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.fillText("👹", e.x, e.y);
@@ -130,31 +161,35 @@ export class Renderer {
 
       ctx.save();
 
-      if (p.mergeAnimTimer > 0) {
-        ctx.shadowColor = def.color;
-        ctx.shadowBlur = 15;
-      }
+      ctx.shadowColor = def.color;
+      ctx.shadowBlur = p.mergeAnimTimer > 0 ? 25 : 10;
 
-      const grad = ctx.createRadialGradient(pos.x - r * 0.3, pos.y - r * 0.3, 0, pos.x, pos.y, r);
-      grad.addColorStop(0, lightenColor(def.color, 40));
-      grad.addColorStop(1, def.color);
+      const grad = ctx.createRadialGradient(
+        pos.x - r * 0.25, pos.y - r * 0.25, r * 0.1,
+        pos.x, pos.y, r,
+      );
+      grad.addColorStop(0, lightenColor(def.color, 70));
+      grad.addColorStop(0.6, def.color);
+      grad.addColorStop(1, darkenColor(def.color, 30));
       ctx.fillStyle = grad;
+
       ctx.beginPath();
       ctx.arc(pos.x, pos.y, r, 0, Math.PI * 2);
       ctx.fill();
 
-      ctx.strokeStyle = lightenColor(def.color, 20);
-      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = lightenColor(def.color, 40);
+      ctx.lineWidth = 2;
       ctx.stroke();
 
       ctx.shadowColor = "transparent";
       ctx.shadowBlur = 0;
 
       ctx.fillStyle = "#fff";
-      ctx.font = `bold ${Math.max(9, r * 0.7)}px monospace`;
+      ctx.font = `bold ${Math.max(10, r * 0.65)}px monospace`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText(`${p.tier + 1}`, pos.x, pos.y);
+      ctx.globalAlpha = 0.9;
+      ctx.fillText(`${p.tier + 1}`, pos.x, pos.y + 1);
 
       ctx.restore();
     }
@@ -164,34 +199,45 @@ export class Renderer {
     const ctx = this.ctx;
 
     ctx.fillStyle = COLORS.hudBg;
-    ctx.fillRect(0, 0, this.width, 36);
+    ctx.fillRect(0, 0, this.width, 40);
+
+    ctx.strokeStyle = "rgba(100, 120, 200, 0.3)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, 40);
+    ctx.lineTo(this.width, 40);
+    ctx.stroke();
 
     ctx.fillStyle = COLORS.hud;
-    ctx.font = "bold 13px monospace";
+    ctx.font = "bold 14px monospace";
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
-    ctx.fillText(`波次 ${wave}`, 10, 18);
+    ctx.fillText(`⚔ 波次 ${wave}`, 12, 20);
 
     ctx.textAlign = "center";
-    ctx.fillText(`💰 ${totalValue}  (${productCount})`, this.width / 2, 18);
+    ctx.fillText(`💰 ${totalValue}  (${productCount}枚)`, this.width / 2, 20);
 
     ctx.textAlign = "right";
-    ctx.fillText(`${fps} FPS`, this.width - 10, 18);
+    ctx.font = "12px monospace";
+    ctx.fillStyle = "rgba(150,170,220,0.6)";
+    ctx.fillText(`${fps} FPS`, this.width - 10, 20);
 
     if (gameOver) {
-      ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+      ctx.fillStyle = "rgba(0, 0, 0, 0.75)";
       ctx.fillRect(0, 0, this.width, this.height);
 
       ctx.fillStyle = "#ff4466";
-      ctx.font = "bold 36px monospace";
+      ctx.font = "bold 38px monospace";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText("游戏结束", this.width / 2, this.height / 2 - 50);
+      ctx.fillText("游戏结束", this.width / 2, this.height / 2 - 60);
 
-      ctx.fillStyle = "#aabbdd";
-      ctx.font = "20px monospace";
-      ctx.fillText(`存活到第 ${wave} 波`, this.width / 2, this.height / 2 + 10);
-      ctx.fillText(`最终财富: ${totalValue}`, this.width / 2, this.height / 2 + 45);
+      ctx.fillStyle = "#ccddff";
+      ctx.font = "22px monospace";
+      ctx.fillText(`存活到第 ${wave} 波`, this.width / 2, this.height / 2);
+
+      ctx.fillStyle = "#ffd700";
+      ctx.fillText(`最终财富: ${totalValue}`, this.width / 2, this.height / 2 + 40);
 
       ctx.fillStyle = "#55ff99";
       ctx.font = "bold 18px monospace";
@@ -209,5 +255,13 @@ function lightenColor(hex: string, amount: number): string {
   const r = Math.min(255, (num >> 16) + amount);
   const g = Math.min(255, ((num >> 8) & 0xff) + amount);
   const b = Math.min(255, (num & 0xff) + amount);
+  return `rgb(${r},${g},${b})`;
+}
+
+function darkenColor(hex: string, amount: number): string {
+  const num = parseInt(hex.replace("#", ""), 16);
+  const r = Math.max(0, (num >> 16) - amount);
+  const g = Math.max(0, ((num >> 8) & 0xff) - amount);
+  const b = Math.max(0, (num & 0xff) - amount);
   return `rgb(${r},${g},${b})`;
 }

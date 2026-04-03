@@ -51,25 +51,26 @@ export interface Particle {
 }
 
 export const PRODUCT_TIERS = [
-  { name: "铜币", color: "#cd7f32", radius: 10, value: 1 },
-  { name: "银币", color: "#c0c0c0", radius: 14, value: 5 },
-  { name: "金币", color: "#ffd700", radius: 18, value: 25 },
-  { name: "宝石", color: "#00cfff", radius: 23, value: 100 },
-  { name: "神石", color: "#bf00ff", radius: 28, value: 400 },
+  { name: "铜币", color: "#e08840", radius: 14, value: 1 },
+  { name: "银币", color: "#d0d0e0", radius: 18, value: 5 },
+  { name: "金币", color: "#ffdd33", radius: 22, value: 25 },
+  { name: "宝石", color: "#22ddff", radius: 27, value: 100 },
+  { name: "神石", color: "#dd44ff", radius: 32, value: 400 },
 ];
 
 export const COLORS = {
   bg: "#0a0a1a",
   battleZone: "#0d0d24",
-  mergeZone: "#0a0a18",
-  platform: "#1a1a3a",
+  mergeZone: "#12122a",
+  platform: "#2a2a50",
+  platformTop: "#3a3a6a",
   wall: "#1a1a3a",
-  divider: "#222255",
+  divider: "#3344aa",
   slash: "#ffffff",
   slashGlow: "rgba(150, 200, 255, 0.5)",
   enemyFill: "#cc3344",
   enemyStroke: "#ff5566",
   leakedEnemy: "#884444",
-  hud: "#aabbdd",
-  hudBg: "rgba(10, 10, 26, 0.7)",
+  hud: "#ccddff",
+  hudBg: "rgba(10, 10, 30, 0.8)",
 };
